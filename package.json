@@ -1,0 +1,23 @@
+{
+    "name": "ten20-hammer",
+    "version": "0.0.0",
+    "description": "ten20-hammer ============",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/alexbirkett/ten20-hammer.git"
+    },
+    "author": "",
+    "license": "BSD",
+    "bugs": {
+        "url": "https://github.com/alexbirkett/ten20-hammer/issues"
+    },
+    "dependencies": {
+        "async": "0.2.9",
+        "optimist": "0.6.0",
+        "request": "2.27.x"
+    }
+}
