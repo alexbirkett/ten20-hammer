@@ -89,10 +89,25 @@ var createRequests = function(number) {
     }
 };
 
+var doWhilstParallel = function(fn, test, callback) {
+    var callCount = 0;
+    var functionCallback = function(err) {
+        callCount--;
+        if (callCount === 0) {
+          console.log('calling back');
+          callback(err);
+      }
+    };
+    do {
+        callCount++;
+        fn(functionCallback);
+    } while (test());
+};
+
 var createUsers = function(number, callback) {
     console.log('creating ' + number + ' users');
     var i = 0;
-    async.doWhilst(function(callback) {
+    doWhilstParallel(function(callback) {
         console.log('createUser '  + i);
         var credential = getCredential(i);
         signup(requests[i], credential, callback);
