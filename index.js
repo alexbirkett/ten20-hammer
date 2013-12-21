@@ -91,18 +91,14 @@ var createRequests = function(number) {
 
 var createUsers = function(number, callback) {
     console.log('creating ' + number + ' users');
-
-    var callbackCount = 0;
-    var callbackAggregator = function(err) {
-       if (++callbackCount === number) {
-           callback(err);
-       }
-    }
-
-    for (i = 0; i < number; i++) {
-        signup(requests[i], getCredential(i), callbackAggregator);
-    }
-
+    var i = 0;
+    async.doWhilst(function(callback) {
+        console.log('createUser '  + i);
+        var credential = getCredential(i);
+        signup(requests[i], credential, callback);
+    },function() {
+        return (++i < number);
+    }, callback);
 };
 
 var deleteCollections = function(callback) {
