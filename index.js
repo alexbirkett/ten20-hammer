@@ -1,31 +1,53 @@
 var optimist = require('optimist');
 var requestApi = require('request');
 var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
-var async = requre('async');
+var async = require('async');
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
-        alias : 'number',
+        alias: 'number',
         describe: 'number of trackers'
     }).
+    options('o', {
+        alias: 'number-of-users',
+        describe: 'number of users'
+    }).
     options('u', {
-        alias : 'url',
+        alias: 'url',
         describe: 'url'
     }).
     options('f', {
-        alias : 'frequency',
+        alias: 'frequency',
         describe: 'update frequency in seconds'
     }).
-   default('f',1).
-   default('n', 1000).
-   default('u', 'http://localhost:3000')
-   .argv;
+    options('t', {
+        alias: 'delete-trips',
+        describe: 'delete trips'
+    }).
+    options('r', {
+        alias: 'delete-trackers',
+        describe: 'delete trackers'
+    }).
+    options('s', {
+        alias: 'delete-users',
+        describe: 'delete users'
+    }).
+    options('c', {
+        alias: 'create-users',
+        describe: 'create users'
+    }).
+    default('o', 1000).
+    default('f', 1).
+    default('n', 1000).
+    default('u', 'http://localhost:3001')
+    .argv;
 
-var postAndExpect200 = function(url, requestBody, errorMessageToPassbackOnUnexpectedResponse, callback) {
-    request.post({url: url, json: requestBody}, function(error, response, body) {
+console.log(argv);
 
-        if (err) {
-            callback(err);
+var requestAndExpect200 = function (request, method, url, requestBody, errorMessageToPassbackOnUnexpectedResponse, callback) {
+    request[method]({url: url, json: requestBody}, function (error, response, body) {
+        if (error) {
+            callback(error);
         } else {
             if (response.statusCode === 200) {
                 callback(null);
@@ -34,59 +56,104 @@ var postAndExpect200 = function(url, requestBody, errorMessageToPassbackOnUnexpe
             }
         }
     });
-}
-var credential1 = {
-    email: 'test@ten20.com',
-    password: 'passwordone'
 };
 
-var signup = function(credential, callback) {
-    postAndExpect200(url + '/signup', credential, callback);
+var signup = function (request, credential, callback) {
+    requestAndExpect200(request, 'post', argv.url + '/signup', credential, 'invalid signup response', callback);
 };
 
-var signin = function(credential, callback) {
-    postAndExpect200(url + '/signin', credential, callback);
+var signin = function (request, credential, callback) {
+    requestAndExpect200(request, 'post', argv.url + '/signin', credential, 'invalid signing response', callback);
 };
 
-
-async.series([
-  function(callback) {
-      signup(callback);
-  },
-  function(callback) {
-      signin(callback);
-  }
-], function(err) {
-
+var deleteCollection = function (request, collectionName, callback) {
+    console.log('deleteing ' + collectionName);
+    request.del(argv.url + '/collection-admin/' + collectionName, true, function(err) {
+        callback();
     });
+};
 
-
-
-/*var postNextLocation = function() {
-
-    var message = {
-
-    };
-
-    console.log('posting message');
-    //console.log(message);
-
-    var timeBefore = new Date().getTime();
-
-    request.post({url: argv.url + '/' + argv.serial, json: message}, function(err, response, body) {
-        if (err) {
-            console.log('error ' + err);
-        }
-        if (response) {
-            console.log('status ' + response.statusCode + ' request took ' + (new Date().getTime() - timeBefore));
-        }
-        setTimeout(postNextLocation, argv.frequency * 1000);
-    });
-
-
+var getCredential = function(i) {
+    var credential = {
+        email: 'test@ten20' + i + '.com',
+        password: 'passwordone'
+        };
+    return credential;
 }
 
-postNextLocation();*/
+var requests = [];
+
+var createRequests = function(number) {
+    for (var i = 0; i < number; i++) {
+        requests[i] = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
+    }
+};
+
+var createUsers = function(number, callback) {
+    console.log('creating ' + number + ' users');
+    var i = 0;
+    async.doWhilst(function(callback) {
+        console.log('createUser '  + i);
+        var credential = getCredential(i);
+        signup(requests[i], credential, callback);
+    },function() {
+        return (++i < number);
+    }, callback);
+};
+
+var deleteCollections = function(callback) {
+    async.series([
+        function (callback) {
+            deleteCollection(request, 'user', callback);
+        },
+        function (callback) {
+            deleteCollection(request, 'trackers', callback);
+        },
+        function (callback) {
+            deleteCollection(request, 'trips', callback);
+        }
+    ], function (err) {
+        callback(err);
+    });
+};
+
+
+var createTaskArray = function() {
+    var tasks = [];
+
+
+    if (argv['delete-trackers']) {
+        tasks.push(function(callback) {
+            deleteCollection(request, 'trackers', callback);
+        });
+    }
+
+    if (argv['delete-trips']) {
+        tasks.push(function(callback) {
+            deleteCollection(request, 'trips', callback);
+        });
+    }
+
+    if (argv['delete-users']) {
+        tasks.push(function(callback) {
+            deleteCollection(request, 'user', callback);
+        });
+    }
+
+    if (argv['create-users']) {
+        tasks.push(function(callback) {
+            createUsers(argv['number-of-users'], callback);
+        });
+    }
+    return tasks;
+};
+
+createRequests(argv['number-of-users']);
+
+async.series(createTaskArray(), function (err) {
+    console.log('error ' + err);
+});
+
 
 
 
