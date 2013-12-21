@@ -108,9 +108,19 @@ var createUsers = function(number, callback) {
     console.log('creating ' + number + ' users');
     var i = 0;
     doWhilstParallel(function(callback) {
-        console.log('createUser '  + i);
         var credential = getCredential(i);
         signup(requests[i], credential, callback);
+    },function() {
+        return (++i < number);
+    }, callback);
+};
+
+var signInAllUsers = function(number, callback) {
+    console.log('signing in ' + number + ' users');
+    var i = 0;
+    doWhilstParallel(function(callback) {
+        var credential = getCredential(i);
+        signin(requests[i], credential, callback);
     },function() {
         return (++i < number);
     }, callback);
@@ -160,6 +170,11 @@ var createTaskArray = function() {
             createUsers(argv['number-of-users'], callback);
         });
     }
+
+    tasks.push(function(callback) {
+        signInAllUsers(argv['number-of-users'], callback);
+    });
+
     return tasks;
 };
 
