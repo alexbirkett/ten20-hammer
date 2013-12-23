@@ -2,6 +2,7 @@ var optimist = require('optimist');
 var requestApi = require('request');
 var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
 var async = require('async');
+var utils = require('./utils');
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
@@ -89,25 +90,10 @@ var createRequests = function(number) {
     }
 };
 
-var doWhilstParallel = function(fn, test, callback) {
-    var callCount = 0;
-    var functionCallback = function(err) {
-        callCount--;
-        if (callCount === 0) {
-          console.log('calling back');
-          callback(err);
-      }
-    };
-    do {
-        callCount++;
-        fn(functionCallback);
-    } while (test());
-};
-
 var createUsers = function(number, callback) {
     console.log('creating ' + number + ' users');
     var i = 0;
-    doWhilstParallel(function(callback) {
+    utils.doWhilstParallel(function(callback) {
         var credential = getCredential(i);
         signup(requests[i], credential, callback);
     },function() {
@@ -118,7 +104,7 @@ var createUsers = function(number, callback) {
 var signInAllUsers = function(number, callback) {
     console.log('signing in ' + number + ' users');
     var i = 0;
-    doWhilstParallel(function(callback) {
+    utils.doWhilstParallel(function(callback) {
         var credential = getCredential(i);
         signin(requests[i], credential, callback);
     },function() {
