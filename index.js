@@ -6,8 +6,8 @@ var utils = require('./utils');
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
-        alias: 'number',
-        describe: 'number of trackers'
+        alias: 'number-of-trackers-per-user',
+        describe: 'number of trackers per user'
     }).
     options('o', {
         alias: 'number-of-users',
@@ -37,13 +37,15 @@ var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequen
         alias: 'create-users',
         describe: 'create users'
     }).
+    options('d', {
+        alias: 'create-trackers',
+        describe: 'create trackers'
+    }).
     default('o', 1000).
     default('f', 1).
-    default('n', 1000).
+    default('n', 10).
     default('u', 'http://localhost:3001')
     .argv;
-
-console.log(argv);
 
 var requestAndExpect200 = function (request, method, url, requestBody, errorMessageToPassbackOnUnexpectedResponse, callback) {
     request[method]({url: url, json: requestBody}, function (error, response, body) {
@@ -65,6 +67,10 @@ var signup = function (request, credential, callback) {
 
 var signin = function (request, credential, callback) {
     requestAndExpect200(request, 'post', argv.url + '/signin', credential, 'invalid signing response', callback);
+};
+
+var postTracker = function(request, tracker, callback) {
+    requestAndExpect200(request, 'post', argv.url + '/trackers', tracker, 'invalid response to put tracker', callback);
 };
 
 var deleteCollection = function (request, collectionName, callback) {
@@ -109,6 +115,33 @@ var signInAllUsers = function(number, callback) {
         signin(requests[i], credential, callback);
     },function() {
         return (++i < number);
+    }, callback);
+};
+
+var createTracker = function(userIndex, trackerIndex) {
+   var tracker = {
+       serial: 'user' + userIndex + 'tracker' + trackerIndex
+   };
+    return tracker;
+};
+
+var createTrackers = function(numberOfUsers, numberOfTrackersPerUser, callback) {
+
+    console.log('creating ' + numberOfTrackersPerUser + ' trackers per user for ' + numberOfUsers + ' users');
+
+    var userIndex = 0;
+
+    utils.doWhilstParallel(function(callback) {
+        var trackerIndex = 0;
+        utils.doWhilstParallel(function(callback) {
+            var tracker = createTracker(userIndex, trackerIndex);
+            postTracker(requests[userIndex], tracker, callback);
+        },function() {
+            return (++trackerIndex < numberOfTrackersPerUser);
+        }, callback);
+
+    },function() {
+        return (++userIndex < numberOfUsers);
     }, callback);
 };
 
@@ -161,6 +194,11 @@ var createTaskArray = function() {
         signInAllUsers(argv['number-of-users'], callback);
     });
 
+    if (argv['create-trackers']) {
+        tasks.push(function(callback) {
+            createTrackers(argv['number-of-users'], argv['number-of-trackers-per-user'], callback);
+        });
+    }
     return tasks;
 };
 
