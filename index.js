@@ -41,8 +41,8 @@ var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequen
         alias: 'create-trackers',
         describe: 'create trackers'
     }).
-    default('o', 1000).
-    default('f', 1).
+    default('o', 100).
+    default('f', 60).
     default('n', 10).
     default('u', 'http://localhost:3001')
     .argv;
@@ -118,11 +118,15 @@ var signInAllUsers = function(number, callback) {
     }, callback);
 };
 
+var calculateTrackerSerial = function(userIndex, trackerIndex) {
+    return 'user' + userIndex + 'tracker' + trackerIndex;
+};
+
 var createTracker = function(userIndex, trackerIndex) {
    var tracker = {
-       serial: 'user' + userIndex + 'tracker' + trackerIndex
+       serial: calculateTrackerSerial(userIndex, trackerIndex)
    };
-    return tracker;
+   return tracker;
 };
 
 var createTrackers = function(numberOfUsers, numberOfTrackersPerUser, callback) {
@@ -161,6 +165,51 @@ var deleteCollections = function(callback) {
     });
 };
 
+var postNextMessage = function(request, serial, count) {
+
+    var message = {
+        timestamp: new Date(),
+        serial: serial,
+        count: count++
+    };
+
+    console.log('posting message');
+    //console.log(message);
+
+    var timeBefore = new Date().getTime();
+
+    request.post({url: argv.url + '/message/' + serial, json: message}, function(err, response, body) {
+        if (err) {
+            console.log('error ' + err);
+        }
+        if (response) {
+            console.log('status ' + response.statusCode + ' request took ' + (new Date().getTime() - timeBefore));
+        }
+        setTimeout(function() {
+            postNextMessage(request, serial, count);
+        }, argv.frequency * 1000);
+    });
+};
+
+
+var startPostingMessages = function(numberOfTrackersPerUser, callback) {
+
+    var timeoutInterval = (argv.frequency * 1000) / (numberOfTrackersPerUser * requests.length);
+    var userIndex = 0;
+    async.doWhilst(function(callback) {
+        var trackerIndex = 0;
+        async.doWhilst(function(callback) {
+            console.log('calling post message');
+            postNextMessage(requests[userIndex], calculateTrackerSerial(userIndex, trackerIndex), 0);
+            setTimeout(callback, timeoutInterval);
+        },function() {
+            return (++trackerIndex < numberOfTrackersPerUser);
+        }, callback);
+
+    },function() {
+        return (++userIndex < requests.length);
+    }, callback);
+};
 
 var createTaskArray = function() {
     var tasks = [];
@@ -199,6 +248,14 @@ var createTaskArray = function() {
             createTrackers(argv['number-of-users'], argv['number-of-trackers-per-user'], callback);
         });
     }
+
+    tasks.push(function(callback) {
+        startPostingMessages(argv['number-of-trackers-per-user'], callback);
+    });
+
+
+
+
     return tasks;
 };
 
