@@ -3,6 +3,7 @@ var requestApi = require('request');
 var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
 var async = require('async');
 var utils = require('./utils');
+var responseTimes = require('./response-times');
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
@@ -173,9 +174,6 @@ var postNextMessage = function(request, serial, count) {
         count: count++
     };
 
-    console.log('posting message');
-    //console.log(message);
-
     var timeBefore = new Date().getTime();
 
     request.post({url: argv.url + '/message/' + serial, json: message}, function(err, response, body) {
@@ -183,14 +181,13 @@ var postNextMessage = function(request, serial, count) {
             console.log('error ' + err);
         }
         if (response) {
-            console.log('status ' + response.statusCode + ' request took ' + (new Date().getTime() - timeBefore));
+            responseTimes.addTime(new Date().getTime() - timeBefore);
         }
         setTimeout(function() {
             postNextMessage(request, serial, count);
         }, argv.frequency * 1000);
     });
 };
-
 
 var startPostingMessages = function(numberOfTrackersPerUser, callback) {
 
@@ -265,6 +262,10 @@ async.series(createTaskArray(), function (err) {
     console.log('error ' + err);
 });
 
+var printAverageResponseTime = function() {
 
+    console.log('average response time ' + responseTimes.calculateAverage());
+    setTimeout(printAverageResponseTime, 1000);
+};
 
-
+printAverageResponseTime();
