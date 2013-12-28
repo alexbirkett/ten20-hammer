@@ -4,6 +4,9 @@ var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar()}
 var async = require('async');
 var utils = require('./utils');
 var responseTimes = require('./response-times');
+var http = require('http');
+pool = new http.Agent(); //Your pool/agent
+pool.maxSockets = 1000;
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
@@ -93,7 +96,7 @@ var requests = [];
 
 var createRequests = function(number) {
     for (var i = 0; i < number; i++) {
-        requests[i] = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
+        requests[i] = requestApi.defaults({followRedirect: false, jar: requestApi.jar(), pool: pool});
     }
 };
 
@@ -166,6 +169,18 @@ var deleteCollections = function(callback) {
     });
 };
 
+var frequency = argv.frequency * 1000;
+
+
+var calculateTimeout = function() {
+    var averageResponseTime = responseTimes.calculateAverage();
+    if (averageResponseTime > 100) {
+        frequency = frequency + 100;
+    } else {
+        frequency = frequency - 100;
+    }
+};
+
 var postNextMessage = function(request, serial, count) {
 
     var message = {
@@ -185,7 +200,7 @@ var postNextMessage = function(request, serial, count) {
         }
         setTimeout(function() {
             postNextMessage(request, serial, count);
-        }, argv.frequency * 1000);
+        },calculateTimeout());
     });
 };
 
@@ -198,7 +213,7 @@ var startPostingMessages = function(numberOfTrackersPerUser, callback) {
         async.doWhilst(function(callback) {
             console.log('calling post message');
             postNextMessage(requests[userIndex], calculateTrackerSerial(userIndex, trackerIndex), 0);
-            setTimeout(callback, timeoutInterval);
+            setTimeout(callback, calculateTimeout());
         },function() {
             return (++trackerIndex < numberOfTrackersPerUser);
         }, callback);
@@ -264,7 +279,7 @@ async.series(createTaskArray(), function (err) {
 
 var printAverageResponseTime = function() {
 
-    console.log('average response time ' + responseTimes.calculateAverage());
+    console.log('average response time ' + responseTimes.calculateAverage() + ' frequency ' + frequency);
     setTimeout(printAverageResponseTime, 1000);
 };
 
