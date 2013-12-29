@@ -3,10 +3,12 @@ var requestApi = require('request');
 var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar()});
 var async = require('async');
 var utils = require('./utils');
-var responseTimes = require('./response-times');
+var ResponseTimes = new require('./response-times');
+var responseTimes = new ResponseTimes(100);
+var FunctionCallCounter = require('./function-call-counter');
 var http = require('http');
 pool = new http.Agent(); //Your pool/agent
-pool.maxSockets = 1000;
+pool.maxSockets = 500;
 
 var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
     options('n', {
@@ -45,8 +47,8 @@ var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequen
         alias: 'create-trackers',
         describe: 'create trackers'
     }).
-    default('o', 100).
-    default('f', 60).
+    default('o', 1000).
+    default('f', 1).
     default('n', 10).
     default('u', 'http://localhost:3001')
     .argv;
@@ -174,15 +176,19 @@ var frequency = argv.frequency * 1000;
 
 var calculateTimeout = function() {
     var averageResponseTime = responseTimes.calculateAverage();
-    if (averageResponseTime > 100) {
-        frequency = frequency + 100;
+    if (averageResponseTime > 1000) {
+        frequency = frequency + 1;
     } else {
-        frequency = frequency - 100;
+        frequency = frequency - 1;
     }
+    return frequency;
 };
+
+var postNextMessageCounter = new FunctionCallCounter();
 
 var postNextMessage = function(request, serial, count) {
 
+    postNextMessageCounter.called();
     var message = {
         timestamp: new Date(),
         serial: serial,
@@ -213,7 +219,7 @@ var startPostingMessages = function(numberOfTrackersPerUser, callback) {
         async.doWhilst(function(callback) {
             console.log('calling post message');
             postNextMessage(requests[userIndex], calculateTrackerSerial(userIndex, trackerIndex), 0);
-            setTimeout(callback, calculateTimeout());
+            setTimeout(callback, 10);
         },function() {
             return (++trackerIndex < numberOfTrackersPerUser);
         }, callback);
@@ -279,7 +285,7 @@ async.series(createTaskArray(), function (err) {
 
 var printAverageResponseTime = function() {
 
-    console.log('average response time ' + responseTimes.calculateAverage() + ' frequency ' + frequency);
+    console.log('average response time ' + responseTimes.calculateAverage() + ' frequency ' + frequency + ' post next message called ' + postNextMessageCounter.count() + ' times per second');
     setTimeout(printAverageResponseTime, 1000);
 };
 
