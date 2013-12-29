@@ -1,22 +1,24 @@
 
 
+var ResponseTimes = function(maxSize) {
+    this.maxSize = maxSize;
+    this.times = []
+}
 
-var times = [];
 
-var MAX_SIZE = 100;
-
-module.exports.addTime = function(time) {
-    times.push(time);
-    if (times.length > MAX_SIZE) {
-        times.shift();
+ResponseTimes.prototype.addTime = function(time) {
+    this.times.push(time);
+    if (this.times.length > this.maxSize) {
+        this.times.shift();
     }
 };
 
-module.exports.calculateAverage = function() {
-
+ResponseTimes.prototype.calculateAverage = function() {
   var sum = 0;
-  times.forEach(function(time) {
+  this.times.forEach(function(time) {
       sum += time;
   });
-  return sum / times.length;
+  return sum / this.times.length;
 };
+
+module.exports = ResponseTimes;
