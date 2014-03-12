@@ -10,7 +10,7 @@ var http = require('http');
 pool = new http.Agent(); //Your pool/agent
 pool.maxSockets = 500;
 
-var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequency [num]').
+var argv = optimist.usage('Usage: $0  --number-of-trackers-per-user [number] --number-of-users [number] --url [string] --timeout [num] --delete-trips --delete-users --create-users').
     options('n', {
         alias: 'number-of-trackers-per-user',
         describe: 'number of trackers per user'
@@ -24,8 +24,8 @@ var argv = optimist.usage('Usage: $0  --serial [string] --url [string] --frequen
         describe: 'url'
     }).
     options('f', {
-        alias: 'frequency',
-        describe: 'update frequency in seconds'
+        alias: 'timeout',
+        describe: 'update timeout in seconds'
     }).
     options('t', {
         alias: 'delete-trips',
@@ -98,7 +98,9 @@ var requests = [];
 
 var createRequests = function(number) {
     for (var i = 0; i < number; i++) {
-        requests[i] = requestApi.defaults({followRedirect: false, jar: requestApi.jar(), pool: pool});
+        var request = requestApi.defaults({followRedirect: false, jar: requestApi.jar(), pool: pool});
+        request.messageCount = 0;
+        requests[i] = request;
     }
 };
 
@@ -121,7 +123,10 @@ var signInAllUsers = function(number, callback) {
         signin(requests[i], credential, callback);
     },function() {
         return (++i < number);
-    }, callback);
+    }, function(err) {
+        console.log('signin complete');
+        callback(err);
+    });
 };
 
 var calculateTrackerSerial = function(userIndex, trackerIndex) {
@@ -171,28 +176,39 @@ var deleteCollections = function(callback) {
     });
 };
 
-var frequency = argv.frequency * 1000;
+var timeout = 12;
 
 
 var calculateTimeout = function() {
+
     var averageResponseTime = responseTimes.calculateAverage();
-    if (averageResponseTime > 1000) {
-        frequency = frequency + 1;
+    if (averageResponseTime > 12) {
+        timeout++
     } else {
-        frequency = frequency - 1;
+        if (timeout > 0) {
+            timeout--;
+        }
     }
-    return frequency;
+    return timeout;
 };
 
 var postNextMessageCounter = new FunctionCallCounter();
 
-var postNextMessage = function(request, serial, count) {
+var currentRequestIndex = 0;
+var currentTrackerIndex = 0;
+
+var postNextMessage = function(callback) {
 
     postNextMessageCounter.called();
+
+    var serial = calculateTrackerSerial(currentRequestIndex, currentTrackerIndex);
+
+    var request = requests[currentRequestIndex];
+
     var message = {
         timestamp: new Date(),
         serial: serial,
-        count: count++
+        count: request.messageCount++
     };
 
     var timeBefore = new Date().getTime();
@@ -204,28 +220,27 @@ var postNextMessage = function(request, serial, count) {
         if (response) {
             responseTimes.addTime(new Date().getTime() - timeBefore);
         }
-        setTimeout(function() {
-            postNextMessage(request, serial, count);
-        },calculateTimeout());
+
+        if (++currentRequestIndex ===  requests.length) {
+            currentRequestIndex = 0;
+            if (++currentTrackerIndex === argv['number-of-trackers-per-user']) {
+                currentTrackerIndex = 0;
+            }
+        }
+        callback();
     });
 };
 
-var startPostingMessages = function(numberOfTrackersPerUser, callback) {
-
-    var timeoutInterval = (argv.frequency * 1000) / (numberOfTrackersPerUser * requests.length);
-    var userIndex = 0;
-    async.doWhilst(function(callback) {
-        var trackerIndex = 0;
-        async.doWhilst(function(callback) {
-            console.log('calling post message');
-            postNextMessage(requests[userIndex], calculateTrackerSerial(userIndex, trackerIndex), 0);
-            setTimeout(callback, 10);
-        },function() {
-            return (++trackerIndex < numberOfTrackersPerUser);
-        }, callback);
-
-    },function() {
-        return (++userIndex < requests.length);
+var startPostingMessages = function(callback) {
+    async.forever(function(callback) {
+        async.series([
+        function(callback){
+            postNextMessage(callback);
+        },function(callback) {
+            setTimeout(callback, calculateTimeout());
+        }], function(err) {
+            callback(err);
+        });
     }, callback);
 };
 
@@ -268,11 +283,8 @@ var createTaskArray = function() {
     }
 
     tasks.push(function(callback) {
-        startPostingMessages(argv['number-of-trackers-per-user'], callback);
+        startPostingMessages(callback);
     });
-
-
-
 
     return tasks;
 };
@@ -285,7 +297,7 @@ async.series(createTaskArray(), function (err) {
 
 var printAverageResponseTime = function() {
 
-    console.log('average response time ' + responseTimes.calculateAverage() + ' frequency ' + frequency + ' post next message called ' + postNextMessageCounter.count() + ' times per second');
+    console.log('average response time ' + responseTimes.calculateAverage() + ' timeout ' + timeout + ' post next message called ' + postNextMessageCounter.count() + ' times per second');
     setTimeout(printAverageResponseTime, 1000);
 };
 
