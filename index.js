@@ -221,14 +221,13 @@ var postNextMessage = function(requestIndex, trackerIndex, callback) {
 
     var timeBefore = new Date().getTime();
 
-    request.post({url: argv.url + '/message/' + serial, json: message}, function(err, response, body) {
+    var url = argv.url + '/message/' + serial;
+    requestAndExpect200(request, 'post', url, message, 'invalid post message response', function(err) {
         if (err) {
             console.log('error ' + err);
         }
-        if (response) {
-            responseTimes.addTime(new Date().getTime() - timeBefore);
-        }
-        callback();
+        responseTimes.addTime(new Date().getTime() - timeBefore);
+        callback(err);
     });
 };
 
