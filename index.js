@@ -25,7 +25,7 @@ var argv = optimist.usage('Usage: $0  --number-of-trackers-per-user [number] --n
     }).
     options('f', {
         alias: 'timeout',
-        describe: 'update timeout in seconds'
+        describe: 'inital update timeout in seconds'
     }).
     options('t', {
         alias: 'delete-trips',
@@ -44,12 +44,22 @@ var argv = optimist.usage('Usage: $0  --number-of-trackers-per-user [number] --n
         describe: 'create users'
     }).
     options('d', {
+        alias: 'target-response-time',
+        describe: 'the hammer will keep adding load until responses take target-response-time ms'
+    }).
+    options('e', {
         alias: 'create-trackers',
         describe: 'create trackers'
     }).
+    options('g',{
+        alias: 'number-of-parallel-requests',
+        describe: 'number of requests to execute in parallel'
+    }).
     default('o', 1000).
-    default('f', 1).
+    default('f', 100).
     default('n', 10).
+    default('d', 100).
+    default('g', 2).
     default('u', 'http://localhost:3001')
     .argv;
 
@@ -176,13 +186,13 @@ var deleteCollections = function(callback) {
     });
 };
 
-var timeout = 12;
+var timeout = argv['timeout'];
 
 
 var calculateTimeout = function() {
 
     var averageResponseTime = responseTimes.calculateAverage();
-    if (averageResponseTime > 12) {
+    if (averageResponseTime > argv['target-response-time']) {
         timeout++
     } else {
         if (timeout > 0) {
@@ -194,16 +204,14 @@ var calculateTimeout = function() {
 
 var postNextMessageCounter = new FunctionCallCounter();
 
-var currentRequestIndex = 0;
-var currentTrackerIndex = 0;
 
-var postNextMessage = function(callback) {
+var postNextMessage = function(requestIndex, trackerIndex, callback) {
 
     postNextMessageCounter.called();
 
-    var serial = calculateTrackerSerial(currentRequestIndex, currentTrackerIndex);
+    var serial = calculateTrackerSerial(requestIndex, trackerIndex);
 
-    var request = requests[currentRequestIndex];
+    var request = requests[requestIndex];
 
     var message = {
         timestamp: new Date(),
@@ -220,22 +228,39 @@ var postNextMessage = function(callback) {
         if (response) {
             responseTimes.addTime(new Date().getTime() - timeBefore);
         }
-
-        if (++currentRequestIndex ===  requests.length) {
-            currentRequestIndex = 0;
-            if (++currentTrackerIndex === argv['number-of-trackers-per-user']) {
-                currentTrackerIndex = 0;
-            }
-        }
         callback();
     });
 };
 
 var startPostingMessages = function(callback) {
+    var trackerIndex = 0;
+    var requestIndex = 0;
+
+    var getRequestIndex = function() {
+        if (++requestIndex === requests.length) {
+            requestIndex = 0;
+            trackerIndex++;
+        }
+        return requestIndex;
+    };
+
+    var getTrackerIndex = function() {
+        if (trackerIndex ===  argv['number-of-trackers-per-user']) {
+            trackerIndex = 0;
+        }
+        return trackerIndex;
+    };
+
     async.forever(function(callback) {
         async.series([
         function(callback){
-            postNextMessage(callback);
+
+            var parallelRequestIndex = 0;
+            utils.doWhilstParallel(function(callback) {
+                postNextMessage(getRequestIndex(), getTrackerIndex(), callback);
+            },function() {
+                return (++parallelRequestIndex < argv['number-of-parallel-requests']);
+            }, callback);
         },function(callback) {
             setTimeout(callback, calculateTimeout());
         }], function(err) {
