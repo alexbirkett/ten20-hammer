@@ -9,7 +9,7 @@ module.exports.doWhilstParallel = function(fn, test, callback) {
         callCount--;
         if (err || (callCount === 0 && !calledBack)) {
             callback(err);
-            callback = true;
+            calledBack = true;
         }
     };
     do {
