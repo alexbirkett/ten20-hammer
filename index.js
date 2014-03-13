@@ -315,14 +315,20 @@ var createTaskArray = function() {
 
 createRequests(argv['number-of-users']);
 
-async.series(createTaskArray(), function (err) {
-    console.log('error ' + err);
-});
-
+var printDebug = true;
 var printAverageResponseTime = function() {
 
     console.log('average response time ' + responseTimes.calculateAverage() + ' timeout ' + timeout + ' post next message called ' + postNextMessageCounter.count() + ' times per second');
-    setTimeout(printAverageResponseTime, 1000);
+    if (printDebug) {
+        setTimeout(printAverageResponseTime, 1000);
+    }
 };
+
+async.series(createTaskArray(), function (err) {
+    console.log('error ' + err);
+    printDebug = false;
+});
+
+
 
 printAverageResponseTime();
